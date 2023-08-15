@@ -1,7 +1,1 @@
-/PSICalc Pfam Datasets for analaysis/
-/PSICalc Pfam Results/
-/Fasta Datasets/
-script.py
-setup.py
-batch_job.py
-batch.py
+/datasets
