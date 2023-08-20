@@ -29,6 +29,7 @@ import pandas as pd
 import numpy as np
 from itertools import combinations, filterfalse
 from .nmi import normalized_mutual_info_score as nmis
+from .nmi import entropy
 
 
 def select_subset(c_list: list, s: int):
@@ -359,15 +360,20 @@ def calculate_time(start):
     return
 
 
-def find_clusters(spread: int, df: pd.DataFrame, k="pairwise") -> dict:
-    """Discovers cluster sites with high shared normalized mutual information.
+def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
+    """
+    Discovers cluster sites with high shared normalized mutual information.
     Provide a dataframe and a sample spread-width. Returns a dictionary.
 
     The variable k by default is set to 'pairwise' to look for pairwise clusters
     and aggregate them prior to running Phase 2. Users may also set k to 'pairwise_only'
     if they only want to output pairwise clusters without aggregating them, in which
     case the program will halt once all pairwise clusters are found. This may be useful
-    when comparing to methods like DCA."""
+    when comparing to methods like DCA.
+
+    By default "e" or entropy is set to 0 but may be adjusted to exclude low entropy sites from
+    being run in the program.
+    """
 
     print("\nEncoding MSA. This may take a while.")
 
@@ -376,9 +382,32 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise") -> dict:
     csv_dict = dict()
     start_time = time.time()
     hash_list = list()
-    msa_index = df.columns.tolist()
+
+    msa_col_list = df.columns.tolist()
+    num_msx = encode_msa(df)
+    num_columns = num_msx.shape[1]
+    encoded_col_list = list(range(num_columns))
+    mapping = dict(zip(msa_col_list, encoded_col_list))
+
+    # Calculate entropy for each column and filter
+    low_entropy_columns = [col_index for col_index in range(num_columns)
+                           if entropy(num_msx[:, col_index]) < e]
+
+    # What will be returned in the data output
+    low_entropy_results = [col_name for col_name in msa_col_list
+                           if mapping[col_name] in low_entropy_columns]
+
+    csv_dict["low_entropy_sites"] = low_entropy_results
+
+    # Create a new msa_index list without values corresponding to low entropy columns
+    msa_index = [col_name for col_name in msa_col_list
+                 if mapping[col_name] not in low_entropy_columns]
+
+    # Create a new matrix without the low entropy regions
+    num_msa = np.delete(num_msx, low_entropy_columns, axis=1)
+
+    print("\nNumber of low entropy regions excluded: ", len(low_entropy_results))
     msa_map = {k: v for v, k in enumerate(msa_index)}
-    num_msa = encode_msa(df)
     subset = select_subset(msa_index, spread)
     subset_list = [[z] for z in subset]
 
@@ -450,7 +479,7 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise") -> dict:
     num_clusters = len(C[0:R])
     cluster_halt = 0
 
-    # Stage Two: Move through the pairs in the list and find their best attribute
+    # Stage Two: Move through the pairs in the list and finds their best attribute
     try:
         while len(C) >= 1:
 
