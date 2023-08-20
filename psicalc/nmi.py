@@ -161,9 +161,16 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
 
 
 def entropy(labels):
-    if len(labels) == 0:
+    """
+    Unlike the sci-kit entropy function, we are modifying it
+    to remove gap labels so they do not interfere with the
+    entropy result.
+    """
+    # non-zero labels i.e. no gaps as gaps are always 0 in psicalc
+    nz_labels = labels[labels != 0]
+    if len(nz_labels) == 0:
         return 1.0
-    labels_u, label_idx = np.unique(labels, return_inverse=True)
+    labels_u, label_idx = np.unique(nz_labels, return_inverse=True)
     if labels_u[0] == 0:
         label_idx = label_idx[label_idx != 0]
     pi = np.bincount(label_idx).astype(np.float64)
@@ -195,6 +202,22 @@ def _generalized_average(U, V, average_method):
 @_deprecate_positional_args
 def normalized_mutual_info_score(labels_true, labels_pred, *,
                                  average_method='geometric'):
+    """
+    This is the core function of the library originally from Pedregosa/sci-kit
+    but we've introduced modifications to handle problems associated with MSAs:
+
+    1. MSAs contain labels we are not interested in, that is gaps. These are
+    handled both in the entropy and the contingency matrix functions. The reason
+    we do not simply discard gaps is that some calculations like mutual information
+    require that labels true and labels predicted be perfectly symmetric so removing
+    would prevent this from working as intended. Instead we "suppress" the places
+    where gaps may introduce results that are not meaningful.
+
+    2. Not all results will normalize between 0 and 1 - result of some low
+    entropy columns being compared to more high entropy columns, leading to
+    a small denominator. We handle this at the bottom simply that if a result
+    is greater than one, it's a fluke and we return 0 instead.
+    """
 
     labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
     classes = np.unique(labels_true)
