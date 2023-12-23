@@ -155,7 +155,8 @@ def return_sr_mode(msa: np.ndarray, m_map: dict, c: list, c_dict: dict, list_sto
         return sr_mode, new_mode
     elif len(c) == 2:
         i, j = m_map.get(c[0]), m_map.get(c[1])
-        max_sum = nmis(msa[:, i], msa[:, j], average_method='geometric')
+        max_sum = nmi_cache(i, j, msa)
+
         new_mode = c
         """
         if max_sum > 1.0:
@@ -171,7 +172,7 @@ def return_sr_mode(msa: np.ndarray, m_map: dict, c: list, c_dict: dict, list_sto
             for location, j in enumerate(c):
                 if location != loc and location > shift:
                     l, r = m_map.get(i), m_map.get(j)
-                    A[loc][1].append(nmis(msa[:, l], msa[:, r], average_method='geometric'))
+                    A[loc][1].append(nmi_cache(l, r, msa))
             t = loc
             q = loc + 1
             if q != D:
@@ -362,8 +363,58 @@ def calculate_time(start):
 
     return
 
+def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
+    """
+    Prepares MSA data for clustering. If there are multiple MSAs, we expect a name
+    to be provided for each. Returns the encoded MSAs combined into one matrix, and
+    a mapping of the column indices to names.
+    """
 
-def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
+    # Rename columns with provided names unless there's only one MSA and no name
+    # is provided.
+    if len(data) > 1 or len(names) > 1:
+        assert len(data) == len(names), "MSA names != MSA columns"
+        for i in range(len(data)):
+            data[i] = data[i].rename(columns=lambda x: names[i] + str(x))
+
+    # Combine into one big MSA and fill gaps due to dimension mismatch with '-'
+    all = pd.concat(data, axis=1)
+    all = all.fillna('-')
+    msa = encode_msa(all)
+
+    # Create a mapping of column indices to names
+    col_names = all.columns.tolist()
+    col_indices = list(range(msa.shape[1]))
+    col_map = dict(zip(col_indices, col_names))
+
+    return msa, col_map
+
+def filter_entropy(msa_data: ([np.ndarray], dict), e: float) -> (np.ndarray, list, list):
+    """
+    Filters all columns of `msa` with entropy lower than `e`. Returns the filtered msa and lists
+    of included and filtered msa column names.
+    """
+    msa = msa_data[0]
+    column_mapping = msa_data[1]
+    num_columns = msa.shape[1]
+
+    # Create lists of low entropy names and column indices, plus interesting msa column names
+    low_entropy_sites = []
+    low_entropy_columns = []
+    msa_names = []
+    for idx in range(num_columns):
+        if entropy(msa[:, idx]) < e:
+            low_entropy_columns.append(idx)
+            low_entropy_sites.append(column_mapping[idx])
+        else:
+            msa_names.append(column_mapping[idx])
+
+    # Create a new matrix without the low entropy regions
+    msa = np.delete(msa, low_entropy_columns, axis=1)
+
+    return msa, msa_names, low_entropy_sites
+
+def find_clusters(spread: int, msa_data: ([np.ndarray], dict), k="pairwise", e=0.0) -> dict:
     """
     Discovers cluster sites with high shared normalized mutual information.
     Provide a dataframe and a sample spread-width. Returns a dictionary.
@@ -386,49 +437,30 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
     start_time = time.time()
     hash_list = list()
 
-    msa_col_list = df.columns.tolist()
-    num_msx = encode_msa(df)
-    num_columns = num_msx.shape[1]
-    encoded_col_list = list(range(num_columns))
-    mapping = dict(zip(msa_col_list, encoded_col_list))
+    num_msa, msa_names, low_entropy_sites = filter_entropy(msa_data, e)
 
-    # Calculate entropy for each column and filter
-    low_entropy_columns = [col_index for col_index in range(num_columns)
-                           if entropy(num_msx[:, col_index]) < e]
+    print("\nNumber of low entropy regions excluded: ", len(low_entropy_sites))
+    csv_dict["low_entropy_sites"] = low_entropy_sites
 
-    # What will be returned in the data output
-    low_entropy_results = [col_name for col_name in msa_col_list
-                           if mapping[col_name] in low_entropy_columns]
-
-    csv_dict["low_entropy_sites"] = low_entropy_results
-
-    # Create a new msa_index list without values corresponding to low entropy columns
-    msa_index = [col_name for col_name in msa_col_list
-                 if mapping[col_name] not in low_entropy_columns]
-
-    # Create a new matrix without the low entropy regions
-    num_msa = np.delete(num_msx, low_entropy_columns, axis=1)
-
-    print("\nNumber of low entropy regions excluded: ", len(low_entropy_results))
-    msa_map = {k: v for v, k in enumerate(msa_index)}
-    subset = select_subset(msa_index, spread)
+    msa_map = {k: v for v, k in enumerate(msa_names)}
+    subset = select_subset(msa_names, spread)
     subset_list = [[z] for z in subset]
 
     print("\nLooking for strong pairwise clusters...")
     for item, each in enumerate(subset_list):
         max_rii, best_cluster = 0.0, None
-        for location, cluster in enumerate(msa_index):
+        for location, cluster in enumerate(msa_names):
             cluster_mode = msa_map.get(cluster)
             subset_mode = msa_map.get(each[0])
 
             if subset_mode != cluster_mode:
-                rii = nmis(num_msa[:, subset_mode], num_msa[:, cluster_mode], average_method='geometric')
+                rii = nmi_cache(subset_mode, cluster_mode, num_msa)
                 if rii > max_rii:
                     max_rii, best_cluster = rii, location
         if best_cluster is None:
             continue
         else:
-            subset_list[item].append(msa_index[best_cluster])
+            subset_list[item].append(msa_names[best_cluster])
             print("pair located: ", subset_list[item])
 
     pair_list = [x for x in subset_list if len(x) > 1]
@@ -459,13 +491,13 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
     for x, j in C:
         for col in j:
             try:
-                msa_index.remove(col)
+                msa_names.remove(col)
             except ValueError:
                 print("\nFAILED: Tried to remove site location ", col, "but it was not found.\n"
                        "This is likely due to duplicates not being removed during check_intersections().")
                 sys.exit()
 
-    if len(msa_index) == 0:
+    if len(msa_names) == 0:
         calculate_time(start_time)
         return csv_dict
 
@@ -477,7 +509,7 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
 
     # Sets the number of clusters we're actually iterating over
     R = len(C)
-    for remaining in msa_index:
+    for remaining in msa_names:
         C.append([0, [remaining]])
     num_clusters = len(C[0:R])
     cluster_halt = 0
@@ -501,7 +533,7 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
                     cluster = entry[1]
                     attr_mode = msa_map.get(cluster[0])
                     if cluster_mode != attr_mode:
-                        rii = nmis(num_msa[:, attr_mode], num_msa[:, cluster_mode], average_method='geometric')
+                        rii = nmi_cache(attr_mode, cluster_mode, num_msa)
                         if rii > max_rii:
                             max_rii, best_cluster, location = rii, cluster, loc
 
@@ -535,3 +567,13 @@ def find_clusters(spread: int, df: pd.DataFrame, k="pairwise", e=0.0) -> dict:
     halt = False
 
     return csv_dict
+
+cache = dict()
+def nmi_cache(a, b, msa):
+    (a, b) = sorted([true, pred])
+    if a in cache:
+        if not b in cache[a]:
+            cache[a][b] = nmis(msa[:, a], msa[:, b], average_method='geometric')
+    else:
+        cache[a] = { b: nmis(msa[:, a], msa[:, b], average_method='geometric') }
+    return cache[a][b]
