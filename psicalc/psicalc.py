@@ -363,6 +363,7 @@ def calculate_time(start):
 
     return
 
+
 def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
     """
     Prepares MSA data for clustering. If there are multiple MSAs, we expect a name
@@ -372,12 +373,13 @@ def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
 
     # Rename columns with provided names unless there's only one MSA and no name
     # is provided.
-    if len(data) > 1 or len(names) > 1:
+    if len(names) > 0:
         assert len(data) == len(names), "MSA names != MSA columns"
         for i in range(len(data)):
             data[i] = data[i].rename(columns=lambda x: names[i] + str(x))
 
     # Combine into one big MSA and fill gaps due to dimension mismatch with '-'
+    print("\nEncoding MSA(s)...")
     all = pd.concat(data, axis=1)
     all = all.fillna('-')
     msa = encode_msa(all)
@@ -389,13 +391,13 @@ def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
 
     return msa, col_map
 
-def filter_entropy(msa_data: ([np.ndarray], dict), e: float) -> (np.ndarray, list, list):
+
+def filter_entropy(msa: np.ndarray, column_map: dict, e: float) -> (np.ndarray, list, list):
     """
     Filters all columns of `msa` with entropy lower than `e`. Returns the filtered msa and lists
     of included and filtered msa column names.
     """
-    msa = msa_data[0]
-    column_mapping = msa_data[1]
+
     num_columns = msa.shape[1]
 
     # Create lists of low entropy names and column indices, plus interesting msa column names
@@ -405,16 +407,17 @@ def filter_entropy(msa_data: ([np.ndarray], dict), e: float) -> (np.ndarray, lis
     for idx in range(num_columns):
         if entropy(msa[:, idx]) < e:
             low_entropy_columns.append(idx)
-            low_entropy_sites.append(column_mapping[idx])
+            low_entropy_sites.append(column_map[idx])
         else:
-            msa_names.append(column_mapping[idx])
+            msa_names.append(column_map[idx])
 
     # Create a new matrix without the low entropy regions
     msa = np.delete(msa, low_entropy_columns, axis=1)
 
     return msa, msa_names, low_entropy_sites
 
-def find_clusters(spread: int, msa_data: ([np.ndarray], dict), k="pairwise", e=0.0) -> dict:
+
+def find_clusters(spread: int, dfs: [pd.DataFrame], msa_names: [str], k="pairwise", e=0.0) -> dict:
     """
     Discovers cluster sites with high shared normalized mutual information.
     Provide a dataframe and a sample spread-width. Returns a dictionary.
@@ -429,15 +432,15 @@ def find_clusters(spread: int, msa_data: ([np.ndarray], dict), k="pairwise", e=0
     being run in the program.
     """
 
-    print("\nEncoding MSA. This may take a while.")
-
     global halt
     halt = False
     csv_dict = dict()
     start_time = time.time()
     hash_list = list()
 
-    num_msa, msa_names, low_entropy_sites = filter_entropy(msa_data, e)
+    msa, column_map = prepare_data(dfs, msa_names)
+    num_msa, msa_names, low_entropy_sites = filter_entropy(msa, column_map, e)
+    csv_dict["column_map"] = column_map
 
     print("\nNumber of low entropy regions excluded: ", len(low_entropy_sites))
     csv_dict["low_entropy_sites"] = low_entropy_sites
@@ -568,12 +571,15 @@ def find_clusters(spread: int, msa_data: ([np.ndarray], dict), k="pairwise", e=0
 
     return csv_dict
 
+
 cache = dict()
+
+
 def nmi_cache(a, b, msa):
-    (a, b) = sorted([true, pred])
+    (a, b) = sorted([a, b])
     if a in cache:
-        if not b in cache[a]:
+        if b not in cache[a]:
             cache[a][b] = nmis(msa[:, a], msa[:, b], average_method='geometric')
     else:
-        cache[a] = { b: nmis(msa[:, a], msa[:, b], average_method='geometric') }
+        cache[a] = {b: nmis(msa[:, a], msa[:, b], average_method='geometric')}
     return cache[a][b]
