@@ -364,11 +364,12 @@ def calculate_time(start):
     return
 
 
-def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
+
+def merge_sequences(data: [pd.DataFrame], names: [str]) -> pd.DataFrame:
     """
-    Prepares MSA data for clustering. If there are multiple MSAs, we expect a name
-    to be provided for each. Returns the encoded MSAs combined into one matrix, and
-    a mapping of the column indices to names.
+    Combine `data` into one big MSA and fill gaps due to dimension mismatch with
+    '-'. Ignores mismatched indices.
+
     """
 
     # Rename columns with provided names unless there's only one MSA and no name
@@ -378,10 +379,22 @@ def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
         for i in range(len(data)):
             data[i] = data[i].rename(columns=lambda x: names[i] + str(x))
 
-    # Combine into one big MSA and fill gaps due to dimension mismatch with '-'
+    data = [d.reset_index(drop=True) for d in data]
+    data = pd.concat(data, axis=1)
+    data = data.fillna('-')
+    return data
+
+
+def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
+    """
+    Prepares MSA data for clustering. If there are multiple MSAs, we expect a name
+    to be provided for each. Returns the encoded MSAs combined into one matrix, and
+    a mapping of the column indices to names.
+    """
+
+    all = merge_sequences(data, names)
+
     print("\nEncoding MSA(s)...")
-    all = pd.concat(data, axis=1)
-    all = all.fillna('-')
     msa = encode_msa(all)
 
     # Create a mapping of column indices to names
@@ -417,7 +430,7 @@ def filter_entropy(msa: np.ndarray, column_map: dict, e: float) -> (np.ndarray, 
     return msa, msa_names, low_entropy_sites
 
 
-def find_clusters(spread: int, dfs: [pd.DataFrame], msa_names: [str], k="pairwise", e=0.0) -> dict:
+def find_clusters(spread: int, dfs: [pd.DataFrame], msa_labels: [str], k="pairwise", e=0.0) -> dict:
     """
     Discovers cluster sites with high shared normalized mutual information.
     Provide a dataframe and a sample spread-width. Returns a dictionary.
@@ -438,21 +451,21 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_names: [str], k="pairwis
     start_time = time.time()
     hash_list = list()
 
-    msa, column_map = prepare_data(dfs, msa_names)
-    num_msa, msa_names, low_entropy_sites = filter_entropy(msa, column_map, e)
+    msa, column_map = prepare_data(dfs, msa_labels)
+    num_msa, msa_attrs, low_entropy_sites = filter_entropy(msa, column_map, e)
     csv_dict["column_map"] = column_map
 
     print("\nNumber of low entropy regions excluded: ", len(low_entropy_sites))
     csv_dict["low_entropy_sites"] = low_entropy_sites
 
-    msa_map = {k: v for v, k in enumerate(msa_names)}
-    subset = select_subset(msa_names, spread)
+    msa_map = {k: v for v, k in enumerate(msa_attrs)}
+    subset = select_subset(msa_attrs, spread)
     subset_list = [[z] for z in subset]
 
     print("\nLooking for strong pairwise clusters...")
     for item, each in enumerate(subset_list):
         max_rii, best_cluster = 0.0, None
-        for location, cluster in enumerate(msa_names):
+        for location, cluster in enumerate(msa_attrs):
             cluster_mode = msa_map.get(cluster)
             subset_mode = msa_map.get(each[0])
 
@@ -463,7 +476,7 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_names: [str], k="pairwis
         if best_cluster is None:
             continue
         else:
-            subset_list[item].append(msa_names[best_cluster])
+            subset_list[item].append(msa_attrs[best_cluster])
             print("pair located: ", subset_list[item])
 
     pair_list = [x for x in subset_list if len(x) > 1]
@@ -494,13 +507,13 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_names: [str], k="pairwis
     for x, j in C:
         for col in j:
             try:
-                msa_names.remove(col)
+                msa_attrs.remove(col)
             except ValueError:
                 print("\nFAILED: Tried to remove site location ", col, "but it was not found.\n"
                        "This is likely due to duplicates not being removed during check_intersections().")
                 sys.exit()
 
-    if len(msa_names) == 0:
+    if len(msa_attrs) == 0:
         calculate_time(start_time)
         return csv_dict
 
@@ -512,7 +525,7 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_names: [str], k="pairwis
 
     # Sets the number of clusters we're actually iterating over
     R = len(C)
-    for remaining in msa_names:
+    for remaining in msa_attrs:
         C.append([0, [remaining]])
     num_clusters = len(C[0:R])
     cluster_halt = 0
