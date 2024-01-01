@@ -28,7 +28,7 @@ import csv
 import warnings
 import pandas as pd
 import numpy as np
-from itertools import combinations, filterfalse
+from itertools import combinations
 from .nmi import normalized_mutual_info_score as nmis
 from .nmi import entropy
 
@@ -354,7 +354,12 @@ def signal_halt() -> bool:
     """Gets the state of the halt global variable. Allows for termination
     of long running process in a safe manner."""
 
-    return halt
+    global halt
+    if halt:
+        halt = False
+        return True
+
+    return False
 
 
 def calculate_time(start):
@@ -364,11 +369,10 @@ def calculate_time(start):
     return
 
 
-
 def merge_sequences(data: [pd.DataFrame], names: [str]) -> pd.DataFrame:
     """
     Combine `data` into one big MSA and fill gaps due to dimension mismatch with
-    '-'. Ignores mismatched indices.
+    '-'. Ignores mismatched indices. Loses row indices
 
     """
 
@@ -385,20 +389,18 @@ def merge_sequences(data: [pd.DataFrame], names: [str]) -> pd.DataFrame:
     return data
 
 
-def prepare_data(data: [pd.DataFrame], names: [str]) -> (np.ndarray, dict):
+def prepare_data(data: pd.DataFrame, names: [str]) -> (np.ndarray, dict):
     """
     Prepares MSA data for clustering. If there are multiple MSAs, we expect a name
     to be provided for each. Returns the encoded MSAs combined into one matrix, and
     a mapping of the column indices to names.
     """
 
-    all = merge_sequences(data, names)
-
     print("\nEncoding MSA(s)...")
-    msa = encode_msa(all)
+    msa = encode_msa(data)
 
     # Create a mapping of column indices to names
-    col_names = all.columns.tolist()
+    col_names = data.columns.tolist()
     col_indices = list(range(msa.shape[1]))
     col_map = dict(zip(col_indices, col_names))
 
@@ -430,7 +432,7 @@ def filter_entropy(msa: np.ndarray, column_map: dict, e: float) -> (np.ndarray, 
     return msa, msa_names, low_entropy_sites
 
 
-def find_clusters(spread: int, dfs: [pd.DataFrame], msa_labels: [str], k="pairwise", e=0.0) -> dict:
+def find_clusters(spread: int, msa: pd.DataFrame, msa_labels: [str], k="pairwise", e=0.0) -> dict:
     """
     Discovers cluster sites with high shared normalized mutual information.
     Provide a dataframe and a sample spread-width. Returns a dictionary.
@@ -451,7 +453,7 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_labels: [str], k="pairwi
     start_time = time.time()
     hash_list = list()
 
-    msa, column_map = prepare_data(dfs, msa_labels)
+    msa, column_map = prepare_data(msa.copy(deep=True), msa_labels)
     num_msa, msa_attrs, low_entropy_sites = filter_entropy(msa, column_map, e)
     csv_dict["column_map"] = column_map
 
@@ -510,7 +512,7 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_labels: [str], k="pairwi
                 msa_attrs.remove(col)
             except ValueError:
                 print("\nFAILED: Tried to remove site location ", col, "but it was not found.\n"
-                       "This is likely due to duplicates not being removed during check_intersections().")
+                      "This is likely due to duplicates not being removed during check_intersections().")
                 sys.exit()
 
     if len(msa_attrs) == 0:
@@ -534,13 +536,17 @@ def find_clusters(spread: int, dfs: [pd.DataFrame], msa_labels: [str], k="pairwi
     try:
         while len(C) >= 1:
 
-            if signal_halt(): break
+            if signal_halt():
+                break
+
             print("\n --> Total Remaining ", len(C))
 
             i = 0
             while i < num_clusters:
 
-                if signal_halt(): break
+                if signal_halt():
+                    break
+
                 location = None
                 cluster_mode = msa_map.get(C[i][1][0])
                 max_rii, best_cluster = 0.0, None
