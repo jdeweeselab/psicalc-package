@@ -430,7 +430,8 @@ def filter_entropy(msa: np.ndarray, column_map: dict, e: float) -> (np.ndarray, 
     return msa, msa_names, low_entropy_sites
 
 
-def find_clusters(spread: int, msa: pd.DataFrame, msa_labels: [str], k="pairwise", e=0.0) -> dict:
+
+def find_clusters(spread: int, msa: pd.DataFrame, k="pairwise", e=0.0) -> dict:
     """
     Discovers cluster sites with high shared normalized mutual information.
     Provide a dataframe and a sample spread-width. Returns a dictionary.
@@ -452,7 +453,7 @@ def find_clusters(spread: int, msa: pd.DataFrame, msa_labels: [str], k="pairwise
     hash_list = list()
 
     # Map labels to columns
-    msa, column_map = prepare_data(msa.copy(deep=True), msa_labels)
+    msa, column_map = prepare_data(msa.copy(deep=True))
     csv_dict["column_map"] = column_map
 
     # Filter low entropy sites
