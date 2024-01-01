@@ -369,19 +369,18 @@ def calculate_time(start):
     return
 
 
-def merge_sequences(data: [pd.DataFrame], names: [str]) -> pd.DataFrame:
+def merge_sequences(data: [pd.DataFrame], labels: [str]) -> pd.DataFrame:
     """
     Combine `data` into one big MSA and fill gaps due to dimension mismatch with
     '-'. Ignores mismatched indices. Loses row indices
-
     """
 
     # Rename columns with provided names unless there's only one MSA and no name
     # is provided.
-    if len(names) > 0:
-        assert len(data) == len(names), "MSA names != MSA columns"
+    if len(labels) > 0:
+        assert len(data) == len(labels), "MSA names != MSA columns"
         for i in range(len(data)):
-            data[i] = data[i].rename(columns=lambda x: names[i] + str(x))
+            data[i] = data[i].rename(columns=lambda x: labels[i] + str(x))
 
     data = [d.reset_index(drop=True) for d in data]
     data = pd.concat(data, axis=1)
@@ -389,11 +388,10 @@ def merge_sequences(data: [pd.DataFrame], names: [str]) -> pd.DataFrame:
     return data
 
 
-def prepare_data(data: pd.DataFrame, names: [str]) -> (np.ndarray, dict):
+def prepare_data(data: pd.DataFrame) -> (np.ndarray, dict):
     """
-    Prepares MSA data for clustering. If there are multiple MSAs, we expect a name
-    to be provided for each. Returns the encoded MSAs combined into one matrix, and
-    a mapping of the column indices to names.
+    Prepares MSA data for clustering. Returns the encoded MSA and a mapping of the
+    column indices to labels.
     """
 
     print("\nEncoding MSA(s)...")
@@ -453,10 +451,12 @@ def find_clusters(spread: int, msa: pd.DataFrame, msa_labels: [str], k="pairwise
     start_time = time.time()
     hash_list = list()
 
+    # Map labels to columns
     msa, column_map = prepare_data(msa.copy(deep=True), msa_labels)
-    num_msa, msa_attrs, low_entropy_sites = filter_entropy(msa, column_map, e)
     csv_dict["column_map"] = column_map
 
+    # Filter low entropy sites
+    num_msa, msa_attrs, low_entropy_sites = filter_entropy(msa, column_map, e)
     print("\nNumber of low entropy regions excluded: ", len(low_entropy_sites))
     csv_dict["low_entropy_sites"] = low_entropy_sites
 
