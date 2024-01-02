@@ -29,10 +29,13 @@ import warnings
 import pandas as pd
 import numpy as np
 from itertools import combinations
-from .nmi import normalized_mutual_info_score as nmis
 from .nmi import entropy
+from .nmi import normalized_mutual_info_score
+from .nmi_cache import NmiCache
 
 warnings.filterwarnings("ignore", category=pd.errors.DtypeWarning)
+
+nmi_cache = NmiCache(normalized_mutual_info_score)
 
 
 def select_subset(c_list: list, s: int):
@@ -155,7 +158,7 @@ def return_sr_mode(msa: np.ndarray, m_map: dict, c: list, c_dict: dict, list_sto
         return sr_mode, new_mode
     elif len(c) == 2:
         i, j = m_map.get(c[0]), m_map.get(c[1])
-        max_sum = nmi_cache(i, j, msa)
+        max_sum = nmi_cache.get(i, j, msa)
 
         new_mode = c
         """
@@ -172,7 +175,7 @@ def return_sr_mode(msa: np.ndarray, m_map: dict, c: list, c_dict: dict, list_sto
             for location, j in enumerate(c):
                 if location != loc and location > shift:
                     l, r = m_map.get(i), m_map.get(j)
-                    A[loc][1].append(nmi_cache(l, r, msa))
+                    A[loc][1].append(nmi_cache.get(l, r, msa))
             t = loc
             q = loc + 1
             if q != D:
@@ -473,7 +476,7 @@ def find_clusters(spread: int, msa: pd.DataFrame, k="pairwise", e=0.0) -> dict:
             subset_mode = msa_map.get(each[0])
 
             if subset_mode != cluster_mode:
-                rii = nmi_cache(subset_mode, cluster_mode, num_msa)
+                rii = nmi_cache.get(subset_mode, cluster_mode, num_msa)
                 if rii > max_rii:
                     max_rii, best_cluster = rii, location
         if best_cluster is None:
@@ -556,7 +559,7 @@ def find_clusters(spread: int, msa: pd.DataFrame, k="pairwise", e=0.0) -> dict:
                     cluster = entry[1]
                     attr_mode = msa_map.get(cluster[0])
                     if cluster_mode != attr_mode:
-                        rii = nmi_cache(attr_mode, cluster_mode, num_msa)
+                        rii = nmi_cache.get(attr_mode, cluster_mode, num_msa)
                         if rii > max_rii:
                             max_rii, best_cluster, location = rii, cluster, loc
 
@@ -590,16 +593,3 @@ def find_clusters(spread: int, msa: pd.DataFrame, k="pairwise", e=0.0) -> dict:
     halt = False
 
     return csv_dict
-
-
-cache = dict()
-
-
-def nmi_cache(a, b, msa):
-    (a, b) = sorted([a, b])
-    if a in cache:
-        if b not in cache[a]:
-            cache[a][b] = nmis(msa[:, a], msa[:, b], average_method='geometric')
-    else:
-        cache[a] = {b: nmis(msa[:, a], msa[:, b], average_method='geometric')}
-    return cache[a][b]
