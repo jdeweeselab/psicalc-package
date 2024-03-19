@@ -25,14 +25,14 @@ import sys
 import re
 import time
 import csv
-import warnings
 import pandas as pd
 import numpy as np
 from itertools import combinations
 from .nmi import normalized_mutual_info_score, entropy, EPSILON
 import psicalc.nmi_util as nmi_util
 
-warnings.filterwarnings("ignore", category=pd.errors.DtypeWarning)
+pd.DataFrame.iteritems = pd.DataFrame.items
+pd.set_option('future.no_silent_downcasting', True)
 
 halt = False
 nmi_util.EPSILON = EPSILON
@@ -138,7 +138,7 @@ def read_txt_file_format(file) -> pd.DataFrame:
 
 def read_csv_file_format(file) -> pd.DataFrame:
     """Reads CSV MSAs into a dataframe."""
-    df = pd.read_csv(file, encoding='utf-8', engine='c', header=None)
+    df = pd.read_csv(file, encoding='utf-8', header=None, dtype=str)
     df = df.rename(columns={df.columns[0]: 'SEQUENCE_ID'})
     df = df.set_index('SEQUENCE_ID', drop=True)
     df = check_for_duplicates(df)

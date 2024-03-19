@@ -23,7 +23,6 @@ import warnings
 import math
 from scipy import sparse as sp
 from sklearn.utils.multiclass import type_of_target
-from sklearn.utils.fixes import _astype_copy_false
 from sklearn.utils.validation import check_array, check_consistent_length
 from sklearn.utils.validation import _deprecate_positional_args
 
@@ -236,8 +235,7 @@ def normalized_mutual_info_score(labels_true, labels_pred, *,
             return 1.0
 
     contingency = contingency_matrix(labels_true, labels_pred, sparse=True)
-    contingency = contingency.astype(np.float64,
-                                     **_astype_copy_false(contingency))
+    contingency = contingency.astype(np.float64, copy=False)
 
     # Calculate the MI for the two clusterings
     mi = mutual_info_score(labels_true, labels_pred,

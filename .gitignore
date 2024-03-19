@@ -1,2 +1,4 @@
 /datasets/*
 /setup.py
+/.python-version
+**/__pycache__
