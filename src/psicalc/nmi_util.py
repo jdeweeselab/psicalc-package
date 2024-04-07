@@ -8,14 +8,12 @@ class NmiCache:
     Memoize NMI lookups
     """
 
-    def __init__(self, f, _use_esp=False):
+    def __init__(self, f):
         self.cache = dict()
-        self.nmi_func = lambda a, b: NmiValue(f(a, b, _use_esp=_use_esp)) if _use_esp else f(a, b, _use_esp=_use_esp)
-        self._use_esp = _use_esp
+        self.nmi_func = lambda a, b: NmiValue(f(a, b))
 
     def get(self, a, b, msa):
-        if self._use_esp:  # XXX: Temp for testing
-            (a, b) = sorted([a, b])
+        (a, b) = sorted([a, b])
 
         if a in self.cache:
             if b not in self.cache[a]:

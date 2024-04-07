@@ -202,8 +202,7 @@ def _generalized_average(U, V, average_method):
 
 @_deprecate_positional_args
 def normalized_mutual_info_score(labels_true, labels_pred, *,
-                                 average_method='geometric',
-                                 _use_esp=False):
+                                 average_method='geometric'):
     """
     This is the core function of the library originally from Pedregosa/sci-kit
     but we've introduced modifications to handle problems associated with MSAs:
@@ -250,11 +249,7 @@ def normalized_mutual_info_score(labels_true, labels_pred, *,
     nmi = mi / normalizer
     # Avoid problems associated with low entropy regions
     # not normalizing correctly
-    if _use_esp:  # XXX: Temp for testing
-        if nmi > 1.0 and not math.isclose(nmi, 1.0, rel_tol=EPSILON):
-            nmi = 0.0
-    else:
-        if nmi > 1.0:
-            nmi = 0.0
+    if nmi > 1.0 and not math.isclose(nmi, 1.0, rel_tol=EPSILON):
+        nmi = 0.0
 
     return nmi
