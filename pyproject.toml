@@ -8,6 +8,12 @@ authors = [
 ]
 description = "Algorithm for clustering protein multiple sequence alignments using normalized mutual information."
 readme = "README.md"
+dependencies = [
+    numpy,
+    pandas,
+    scikit-learn,
+    scipy,
+]
 requires-python = ">=3.6"
 classifiers = [
     "Programming Language :: Python :: 3",
