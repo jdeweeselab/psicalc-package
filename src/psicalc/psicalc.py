@@ -98,7 +98,7 @@ def deweese_schema(df: pd.DataFrame, pattern='^-') -> pd.DataFrame:
         df = df.rename(columns=lambda x: int(x))
 
     except IndexError or KeyError:
-        sys.exit(1)
+        raise Exception("invalid Deweese schema")
 
     return df
 
