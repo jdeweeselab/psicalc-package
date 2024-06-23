@@ -115,7 +115,7 @@ def check_for_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def read_txt_file_format(file) -> pd.DataFrame:
-    """Reads FASTA files or text file-based MSAs into a dataframe."""
+    """Reads text file-based MSAs into a dataframe."""
     id, seq = [], []
     with open(file, "r") as fasta_file:
         for line in fasta_file:
@@ -125,6 +125,34 @@ def read_txt_file_format(file) -> pd.DataFrame:
                 seq.append([*line.strip("\n")])
         res = list(zip(id, seq))
         fasta_file.close()
+    nucs_dict = dict(res)
+
+    df = pd.DataFrame.from_dict(nucs_dict, orient='index')
+    df = df.replace({'.': '-'})
+    df.index.name = 'SEQUENCE_ID'
+    df = check_for_duplicates(df)
+    df.fillna('?', inplace=True)
+
+    return df
+
+
+def read_fasta_file_format(file) -> pd.DataFrame:
+    """Reads FASTA files or text file-based MSAs into a dataframe."""
+    ids, sequences = [], []
+    with open(file, "r") as fasta_file:
+        data = []
+        for line in fasta_file:
+            if line.startswith(">"):
+                if ids:
+                    sequences.append(data)
+                    data = []
+                ids.append(line.strip(">").strip())
+            elif line:
+                data.extend(line.strip())
+
+        sequences.append(data)
+        res = list(zip(ids, sequences))
+
     nucs_dict = dict(res)
 
     df = pd.DataFrame.from_dict(nucs_dict, orient='index')
