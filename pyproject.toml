@@ -1,6 +1,6 @@
 [project]
 name = "psicalc"
-version = "0.6.1"
+version = "0.6.3"
 authors = [
   { name="Joe Deweese Lab", email="jdeweeselab@gmail.com" },
   { name="Thomas Townsley", email="thomas@mandosoft.dev" },
